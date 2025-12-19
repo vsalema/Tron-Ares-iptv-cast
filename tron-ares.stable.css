@@ -2136,3 +2136,16 @@ body.theme-redblue .np-logo img {
   opacity: .45;
   pointer-events: none;
 }
+/* Flags as inline SVG (base64) to avoid Windows/Chrome flag-emoji fallback (FR/PT letters) */
+.flag {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  border-radius: 2px;
+  background-size: cover;
+  background-position: center;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.25);
+}
+.flag-fr { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNmZmZmZmYiLz4KICA8cmVjdCB3aWR0aD0iMjEuMzMzIiBoZWlnaHQ9IjY0IiB4PSIwIiB5PSIwIiBmaWxsPSIjMDA1NUE0Ii8+CiAgPHJlY3Qgd2lkdGg9IjIxLjMzMyIgaGVpZ2h0PSI2NCIgeD0iNDIuNjY3IiB5PSIwIiBmaWxsPSIjRUY0MTM1Ii8+Cjwvc3ZnPg=="); }
+.flag-pt { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNEQTI5MUMiLz4KICA8cmVjdCB3aWR0aD0iMjUuNiIgaGVpZ2h0PSI2NCIgeD0iMCIgeT0iMCIgZmlsbD0iIzA0NkEzOCIvPgogIDwhLS0gc2ltcGxpZmllZCBlbWJsZW0gLS0+CiAgPGNpcmNsZSBjeD0iMjUuNiIgY3k9IjMyIiByPSIxMSIgZmlsbD0iI0ZGQ0MwMCIvPgogIDxjaXJjbGUgY3g9IjI1LjYiIGN5PSIzMiIgcj0iNy41IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjkiLz4KICA8Y2lyY2xlIGN4PSIyNS42IiBjeT0iMzIiIHI9IjUuMiIgZmlsbD0iI0RBMjkxQyIgb3BhY2l0eT0iMC45NSIvPgo8L3N2Zz4="); }
