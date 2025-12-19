@@ -2175,4 +2175,76 @@ body.theme-redblue .np-logo img {
 .tab-btn .tab-label{
   overflow: hidden;
   text-
+/* ==============================
+   Tabs aside — anti overflow + responsive
+   ============================== */
+
+/* 1) Empêche tout overflow horizontal dans la sidebar */
+aside,
+aside *{
+  box-sizing: border-box;
+}
+
+aside{
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Si ton aside est dans un layout flex/grid, ça évite le “min-width:auto” qui casse tout */
+aside{
+  min-width: 0;
+}
+
+/* 2) Bouton tab : layout stable (flag + texte) */
+.tab-btn{
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;              /* CRUCIAL : autorise le shrink */
+
+  gap: 10px;
+  padding: 10px 12px;
+
+  overflow: hidden;          /* coupe l’excédent */
+}
+
+/* 3) Drapeau : taille fixe, jamais de shrink, rendu propre */
+.tab-btn .flag-ico{
+  flex: 0 0 auto;            /* ne shrink pas */
+  width: 22px;
+  height: 16px;
+  max-width: 22px;
+  max-height: 16px;
+
+  object-fit: cover;
+  display: block;
+
+  border-radius: 4px;        /* propre (pas 145px) */
+  overflow: hidden;
+}
+
+/* 4) Texte : seul élément qui shrink + ellipsis */
+.tab-btn .tab-label{
+  flex: 1 1 auto;
+  min-width: 0;              /* CRUCIAL : ellipsis fonctionne */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 5) Mobile : un peu plus compact */
+@media (max-width: 480px){
+  .tab-btn{
+    gap: 8px;
+    padding: 9px 10px;
+  }
+  .tab-btn .flag-ico{
+    width: 20px;
+    height: 14px;
+    border-radius: 4px;
+  }
+}
 
