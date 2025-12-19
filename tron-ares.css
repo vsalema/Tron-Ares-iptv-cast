@@ -2136,3 +2136,19 @@ body.theme-redblue .np-logo img {
   opacity: .45;
   pointer-events: none;
 }
+/* ✅ Assure l’affichage des drapeaux (emoji) dans Chrome */
+.tab-btn span{
+  display: inline-block;
+  margin-right: 6px;
+  line-height: 1;
+  font-size: 1.1em;
+
+  /* Fallbacks emoji (Windows / macOS / Linux / Android) */
+  font-family:
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    "Noto Color Emoji",
+    system-ui,
+    sans-serif;
+}
