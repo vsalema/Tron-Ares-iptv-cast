@@ -2143,4 +2143,36 @@ body.theme-redblue .np-logo img {
   vertical-align: -3px;
   border-radius: 3px;
 }
+/* Empêche le débordement des tabs (flag + texte) */
+.tab-btn{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  width: 100%;
+  max-width: 100%;
+
+  overflow: hidden;          /* coupe ce qui dépasse */
+  white-space: nowrap;       /* pas de retour à la ligne */
+  text-overflow: ellipsis;   /* ... */
+}
+
+/* Le texte du bouton doit pouvoir se couper avec ... */
+.tab-btn{
+  min-width: 0;              /* important en flex pour autoriser ellipsis */
+}
+
+/* Drapeau : taille fixe, ne rétrécit pas */
+.tab-btn .flag-ico{
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+/* Si tu veux être sûr que le texte se coupe bien, wrappe-le dans un span */
+.tab-btn .tab-label{
+  overflow: hidden;
+  text-
 
