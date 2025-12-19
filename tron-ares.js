@@ -501,7 +501,7 @@ const audioTrackMenu = document.getElementById('audioTrackMenu');
 const subtitleTrackMenu = document.getElementById('subtitleTrackMenu');
 
 // --- Chromecast ---
-const castBtn = document.getElementById('castBtn');
+const castLauncher = document.getElementById('castLauncher');
 
 
 // --- Recherche ---
@@ -708,9 +708,9 @@ function _castHasFramework() {
 }
 
 function updateCastButtonUI() {
-  if (!castBtn) return;
+  if (!castLauncher) return;
 
-  castBtn.classList.remove('cast-disabled','cast-available','cast-connecting','cast-connected');
+  castLauncher.classList.remove('cast-disabled','cast-available','cast-connecting','cast-connected');
 
   // Par défaut : désactivé
   let disabled = true;
@@ -725,30 +725,30 @@ function updateCastButtonUI() {
     } else if (cs === cast.framework.CastState.CONNECTING) {
       disabled = false;
       label = 'Connexion Chromecast…';
-      castBtn.classList.add('cast-connecting','cast-available');
+      castLauncher.classList.add('cast-connecting','cast-available');
     } else if (cs === cast.framework.CastState.CONNECTED) {
       disabled = false;
       label = 'Casting en cours — cliquer pour arrêter';
-      castBtn.classList.add('cast-connected');
+      castLauncher.classList.add('cast-connected');
     } else {
       // NOT_CONNECTED (devices dispo) ou état inconnu
       disabled = false;
       label = 'Caster sur Chromecast';
-      castBtn.classList.add('cast-available');
+      castLauncher.classList.add('cast-available');
     }
   } else {
     disabled = true;
     label = 'Chromecast indisponible (Chrome/Edge requis)';
   }
 
-  castBtn.title = label;
-  castBtn.setAttribute('aria-label', label);
+  castLauncher.title = label;
+  castLauncher.setAttribute('aria-label', label);
 
   if (disabled) {
-    castBtn.classList.add('cast-disabled');
-    castBtn.setAttribute('aria-disabled', 'true');
+    castLauncher.classList.add('cast-disabled');
+    castLauncher.setAttribute('aria-disabled', 'true');
   } else {
-    castBtn.removeAttribute('aria-disabled');
+    castLauncher.removeAttribute('aria-disabled');
   }
 }
 
@@ -863,47 +863,8 @@ async function castLoadCurrentEntry(silent = false) {
   }
 }
 
-async function handleCastClick() {
-  if (!castBtn) return;
-
-  if (!_castHasFramework() || !CAST.frameworkReady) {
-    setStatus('Chromecast indisponible (Chrome/Edge requis)');
-    return;
-  }
-
-  const ctx = cast.framework.CastContext.getInstance();
-  const castState = ctx.getCastState();
-
-  if (castState === cast.framework.CastState.NO_DEVICES_AVAILABLE) {
-    setStatus('Aucun Chromecast détecté');
-    return;
-  }
-
-  // Si déjà connecté : stop
-  if (castState === cast.framework.CastState.CONNECTED) {
-    try {
-      ctx.endCurrentSession(true);
-      setStatus('Chromecast : arrêt');
-    } catch {
-      setStatus('Chromecast : arrêt impossible');
-    }
-    return;
-  }
-
-  // Sinon : demande device + cast
-  try {
-    await ctx.requestSession();
-    await castLoadCurrentEntry(true);
-  } catch (e) {
-    // l’utilisateur peut annuler la fenêtre
-    console.warn('Chromecast requestSession canceled/error', e);
-    setStatus('Chromecast : annulé');
-  }
-}
-
-// Bind click
-if (castBtn) {
-  castBtn.addEventListener('click', handleCastClick);
+// Bind UI
+if (castLauncher) {
   updateCastButtonUI(); // état initial
 }
 
@@ -917,12 +878,19 @@ window.__onGCastApiAvailable = function(isAvailable) {
 
   try {
     const ctx = cast.framework.CastContext.getInstance();
+    const DEFAULT_RECEIVER_APP_ID =
+      (cast.framework && cast.framework.CastContext && cast.framework.CastContext.DEFAULT_MEDIA_RECEIVER_APP_ID)
+      ? cast.framework.CastContext.DEFAULT_MEDIA_RECEIVER_APP_ID
+      : 'CC1AD845'; // Default Media Receiver (fallback)
+
     ctx.setOptions({
-      receiverApplicationId: cast.framework.CastContext.DEFAULT_MEDIA_RECEIVER_APP_ID,
+      receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
       autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
     });
 
-    CAST.frameworkReady = true;
+    // Debug (décommente si besoin)
+    // cast.framework.Logger.setLevel(cast.framework.LoggerLevel.DEBUG);
+CAST.frameworkReady = true;
     CAST.castState = ctx.getCastState();
 
     ctx.addEventListener(
@@ -958,6 +926,15 @@ window.__onGCastApiAvailable = function(isAvailable) {
     updateCastButtonUI();
   }
 };
+
+// CAST: init immédiat si déjà dispo (si le SDK s’est chargé avant la callback)
+try{
+  if (_castHasFramework() && typeof window.__onGCastApiAvailable === 'function' && window.cast && window.cast.framework) {
+    // Some builds set chrome.cast.isAvailable, others rely on cast.framework presence
+    window.__onGCastApiAvailable(true);
+  }
+}catch{}
+
 
 // =====================================================
 // STREAM URL (Akamai-style)

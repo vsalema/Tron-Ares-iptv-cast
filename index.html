@@ -231,10 +231,8 @@
 
   <!-- Chromecast -->
   <div class="np-actions" id="npActions">
-    <button class="icon-btn np-action-btn cast-btn" id="castBtn"
-            title="Chromecast" aria-label="Chromecast">
-      📺
-    </button>
+    <google-cast-launcher class="icon-btn np-action-btn cast-launcher" id="castLauncher"
+      title="Chromecast" aria-label="Chromecast"></google-cast-launcher>
   </div>
 
   <!-- Nouveau bloc contrôles films (channelList) -->
@@ -320,8 +318,8 @@
 </div>
 
 
-<script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 
 <script src="tron-ares.js"></script>
+<script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 </body>
 </html>
