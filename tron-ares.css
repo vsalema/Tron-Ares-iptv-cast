@@ -179,21 +179,6 @@ body {
 
 .tab-btn span { font-size: 13px; }
 
-/* Inline SVG flags (Chrome on Windows may show FR/PT letters for flag emojis) */
-.flag {
-  width: 1.15em;
-  height: 1.15em;
-  display: inline-block;
-  border-radius: 2px;
-  background-size: cover;
-  background-position: center;
-  flex: 0 0 auto;
-  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.25);
-}
-.flag-fr { background-image: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2264%22%20height=%2264%22%20viewBox=%220%200%2064%2064%22%3E%0A%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22#fff%22/%3E%0A%3Crect%20width=%2221.333%22%20height=%2264%22%20x=%220%22%20y=%220%22%20fill=%22#0055A4%22/%3E%0A%3Crect%20width=%2221.333%22%20height=%2264%22%20x=%2242.667%22%20y=%220%22%20fill=%22#EF4135%22/%3E%0A%3C/svg%3E'); }
-.flag-pt { background-image: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2264%22%20height=%2264%22%20viewBox=%220%200%2064%2064%22%3E%0A%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22#DA291C%22/%3E%0A%3Crect%20width=%2225.6%22%20height=%2264%22%20x=%220%22%20y=%220%22%20fill=%22#046A38%22/%3E%0A%3C!--%20simplified%20emblem%20--%3E%0A%3Ccircle%20cx=%2225.6%22%20cy=%2232%22%20r=%2211%22%20fill=%22#FFCC00%22/%3E%0A%3Ccircle%20cx=%2225.6%22%20cy=%2232%22%20r=%227.5%22%20fill=%22#ffffff%22%20opacity=%220.9%22/%3E%0A%3Ccircle%20cx=%2225.6%22%20cy=%2232%22%20r=%225.2%22%20fill=%22#DA291C%22%20opacity=%220.95%22/%3E%0A%3C/svg%3E'); }
-
-
 .tab-btn.active {
   color: var(--tron-text);
   border-color: var(--tron-accent);
@@ -2151,3 +2136,18 @@ body.theme-redblue .np-logo img {
   opacity: .45;
   pointer-events: none;
 }
+
+
+/* Flags as inline SVG (base64) to avoid Windows/Chrome flag-emoji fallback (FR/PT letters) */
+.flag {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  border-radius: 2px;
+  background-size: cover;
+  background-position: center;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.25);
+}
+.flag-fr { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNmZmZmZmYiLz4KICA8cmVjdCB3aWR0aD0iMjEuMzMzIiBoZWlnaHQ9IjY0IiB4PSIwIiB5PSIwIiBmaWxsPSIjMDA1NUE0Ii8+CiAgPHJlY3Qgd2lkdGg9IjIxLjMzMyIgaGVpZ2h0PSI2NCIgeD0iNDIuNjY3IiB5PSIwIiBmaWxsPSIjRUY0MTM1Ii8+Cjwvc3ZnPg=="); }
+.flag-pt { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNEQTI5MUMiLz4KICA8cmVjdCB3aWR0aD0iMjUuNiIgaGVpZ2h0PSI2NCIgeD0iMCIgeT0iMCIgZmlsbD0iIzA0NkEzOCIvPgogIDwhLS0gc2ltcGxpZmllZCBlbWJsZW0gLS0+CiAgPGNpcmNsZSBjeD0iMjUuNiIgY3k9IjMyIiByPSIxMSIgZmlsbD0iI0ZGQ0MwMCIvPgogIDxjaXJjbGUgY3g9IjI1LjYiIGN5PSIzMiIgcj0iNy41IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjkiLz4KICA8Y2lyY2xlIGN4PSIyNS42IiBjeT0iMzIiIHI9IjUuMiIgZmlsbD0iI0RBMjkxQyIgb3BhY2l0eT0iMC45NSIvPgo8L3N2Zz4="); }
