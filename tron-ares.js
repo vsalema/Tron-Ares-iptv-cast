@@ -34,360 +34,8 @@ const iframeItems = [];   // Overlays / iFrames
 // - PIN : hash SHA-256 en localStorage, déverrouillage temporaire en sessionStorage
 // ⚠️ Contrôle côté navigateur uniquement (pratique, pas une “sécurité anti-hack”)
 // =====================================================
-const MOVIE_LOCK = {
-  enabled: true,
-  previewSeconds: 5 * 60,
-  unlockMinutes: 60,
-  pinHashKey: 'tronAresMoviePinHash',
-  unlockedUntilKey: 'tronAresMovieUnlockedUntil',
-  previewExpiredKey: 'tronAresMoviePreviewExpired',
-  _modal: null
-};
-
-// --- état aperçu ---
-let filmPreviewTimer = null;
-let filmPreviewArmedForUrl = null;
-let pendingFilmResume = null; // { entry, time, url }
-
-function isFilmEntry(entry) {
-  // "Films" = listType === 'channels'
-  return !!(entry && entry.listType === 'channels');
-}
-
-function _hex(buffer) {
-  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function sha256(text) {
-  const enc = new TextEncoder().encode(String(text ?? ''));
-  const digest = await crypto.subtle.digest('SHA-256', enc);
-  return _hex(digest);
-}
-
-function movieLockGetHash() {
-  try { return localStorage.getItem(MOVIE_LOCK.pinHashKey) || ''; } catch { return ''; }
-}
-
-function movieLockHasPin() {
-  return !!movieLockGetHash();
-}
-
-function movieLockGetUnlockedUntil() {
-  try {
-    const v = sessionStorage.getItem(MOVIE_LOCK.unlockedUntilKey);
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function movieLockIsUnlocked() {
-  if (!MOVIE_LOCK.enabled) return true;
-  return Date.now() < movieLockGetUnlockedUntil();
-}
-
-function movieLockSetUnlocked(minutes = MOVIE_LOCK.unlockMinutes) {
-  const until = Date.now() + Math.max(1, Number(minutes) || 1) * 60_000;
-  try { sessionStorage.setItem(MOVIE_LOCK.unlockedUntilKey, String(until)); } catch {}
-  try { sessionStorage.removeItem(MOVIE_LOCK.previewExpiredKey); } catch {}
-  updateFilmAccessBtnUI?.();
-  return until;
-}
-
-function movieLockLockNow() {
-  try { sessionStorage.removeItem(MOVIE_LOCK.unlockedUntilKey); } catch {}
-  updateFilmAccessBtnUI?.();
-}
-
-async function movieLockCheckPin(pin) {
-  const stored = movieLockGetHash();
-  if (!stored) return false;
-  const h = await sha256(pin);
-  return h === stored;
-}
-
-async function movieLockSetPin(pin) {
-  const clean = String(pin ?? '').trim();
-  if (!clean || clean.length < 4) return false;
-  const h = await sha256(clean);
-  try { localStorage.setItem(MOVIE_LOCK.pinHashKey, h); } catch {}
-  return true;
-}
-
-// --- Modal : HTML dans index.html, JS = seulement pilotage ---
-function movieLockEnsureModal() {
-  if (MOVIE_LOCK._modal) return MOVIE_LOCK._modal;
-
-  const backdrop = document.getElementById('movieLockBackdrop');
-  if (!backdrop) {
-    console.warn('[movieLock] #movieLockBackdrop introuvable dans index.html');
-    // fallback minimal : pas de modal
-    MOVIE_LOCK._modal = {
-      open() { alert('Modal manquant : ajoute #movieLockBackdrop dans index.html'); },
-      close() {},
-      flash() {}
-    };
-    return MOVIE_LOCK._modal;
-  }
-
-  const hint = backdrop.querySelector('#movieLockHint');
-  const input = backdrop.querySelector('#movieLockPinInput');
-  const unlockBtn = backdrop.querySelector('#movieLockUnlockBtn');
-  const setPinBtn = backdrop.querySelector('#movieLockSetPinBtn');
-  const lockBtn = backdrop.querySelector('#movieLockLockBtn');
-  const cancelBtn = backdrop.querySelector('#movieLockCancelBtn');
-
-  const api = {
-    backdrop, hint, input,
-    _onSuccess: null,
-    open(onSuccess) {
-      api._onSuccess = typeof onSuccess === 'function' ? onSuccess : null;
-
-      if (hint) {
-        hint.textContent = movieLockHasPin()
-          ? "Entrez votre PIN pour déverrouiller l’accès aux Films."
-          : "Aucun PIN n’est défini. Cliquez sur « Définir / changer PIN » pour activer la restriction.";
-      }
-
-      if (input) input.value = '';
-      backdrop.classList.remove('hidden');
-      backdrop.setAttribute('aria-hidden', 'false');
-      setTimeout(() => { try { input?.focus?.(); } catch {} }, 0);
-    },
-    close() {
-      backdrop.classList.add('hidden');
-      backdrop.setAttribute('aria-hidden', 'true');
-      api._onSuccess = null;
-    },
-    flash(msg) {
-      if (!hint) return;
-      hint.textContent = msg;
-      hint.classList.add('tron-lock-warn');
-      setTimeout(() => hint.classList.remove('tron-lock-warn'), 650);
-    }
-  };
-
-  const tryUnlock = async () => {
-    if (!movieLockHasPin()) {
-      api.flash("Définis d’abord un PIN.");
-      return;
-    }
-    const ok = await movieLockCheckPin(input?.value);
-    if (!ok) {
-      api.flash("PIN incorrect.");
-      return;
-    }
-
-    movieLockSetUnlocked();
-    api.close();
-
-    // Rafraîchit l'UI
-    try { refreshActiveListsUI?.(); } catch {}
-
-    if (typeof api._onSuccess === 'function') api._onSuccess();
-    try { setStatus?.('Films déverrouillés'); } catch {}
-  };
-
-  // bind une seule fois
-  if (!backdrop.dataset.bound) {
-    backdrop.dataset.bound = '1';
-
-    unlockBtn?.addEventListener('click', (e) => { e.preventDefault(); tryUnlock(); });
-    input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tryUnlock(); } });
-
-    setPinBtn?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      const p1 = prompt('Définis un nouveau PIN (4 chiffres ou plus) :');
-      if (p1 === null) return;
-      const p2 = prompt('Confirme le PIN :');
-      if (p2 === null) return;
-      if (String(p1) !== String(p2)) { api.flash('Les PIN ne correspondent pas.'); return; }
-
-      const ok = await movieLockSetPin(p1);
-      if (!ok) { api.flash('PIN invalide (minimum 4 caractères).'); return; }
-
-      api.flash('PIN enregistré. Tu peux déverrouiller.');
-    });
-
-    lockBtn?.addEventListener('click', (e) => {
-      e.preventDefault();
-      movieLockLockNow();
-      api.flash('Films verrouillés.');
-      try { refreshActiveListsUI?.(); } catch {}
-      try { setStatus?.('Films verrouillés'); } catch {}
-    });
-
-    cancelBtn?.addEventListener('click', (e) => { e.preventDefault(); api.close(); });
-
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) api.close(); });
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      if (backdrop.classList.contains('hidden')) return;
-      api.close();
-    });
-  }
-
-  MOVIE_LOCK._modal = api;
-  return api;
-}
-
-// --- wrappers compat (anciens noms utilisés ailleurs) ---
-function hasFilmAccess() {
-  return movieLockIsUnlocked();
-}
-
-function setFilmAccessGranted() {
-  movieLockSetUnlocked();
-  try { updateFilmAccessBtnUI?.(); } catch {}
-}
-
-function isFilmPreviewExpired() {
-  try { return sessionStorage.getItem(MOVIE_LOCK.previewExpiredKey) === '1'; } catch { return false; }
-}
-
-function setFilmPreviewExpired() {
-  try { sessionStorage.setItem(MOVIE_LOCK.previewExpiredKey, '1'); } catch {}
-}
-
-function clearFilmPreviewTimer() {
-  if (filmPreviewTimer) {
-    clearTimeout(filmPreviewTimer);
-    filmPreviewTimer = null;
-  }
-  filmPreviewArmedForUrl = null;
-}
-
-function ensureFilmAccessOverlay() {
-  // maintenant : le HTML est dans index.html (movieLockBackdrop)
-  movieLockEnsureModal();
-}
-
-function closeFilmAccessOverlay() {
-  const m = movieLockEnsureModal();
-  m.close();
-}
-
-// Ouvre le modal et, si besoin, reprend la lecture après déverrouillage
-function openFilmAccessOverlay(opts = {}) {
-  ensureFilmAccessOverlay();
-
-  const resumeEntry = opts.resumeEntry || null;
-  const resumeTime = (typeof opts.resumeTime === 'number' && isFinite(opts.resumeTime)) ? opts.resumeTime : 0;
-
-  if (resumeEntry && resumeEntry.url) {
-    pendingFilmResume = { entry: resumeEntry, time: resumeTime, url: resumeEntry.url };
-  } else {
-    pendingFilmResume = null;
-  }
-
-  const m = movieLockEnsureModal();
-  m.open(() => {
-    // reprise éventuelle
-    if (pendingFilmResume?.entry?.url) {
-      const { entry, time } = pendingFilmResume;
-      pendingFilmResume = null;
-
-      try {
-        // playUrl existe plus bas dans le fichier (function hoisting OK)
-        playUrl(entry);
-        // reprise au temps demandé (si VOD)
-        if (videoEl && typeof time === 'number' && isFinite(time) && time > 0) {
-          const t = time;
-          const seekOnce = () => {
-            try { videoEl.currentTime = t; } catch {}
-            videoEl.removeEventListener('loadedmetadata', seekOnce);
-          };
-          videoEl.addEventListener('loadedmetadata', seekOnce);
-        }
-      } catch {}
-    }
-  });
-}
-
-// Ancienne validation “code” -> maintenant validation PIN
-async function handleFilmAccessCode(code) {
-  ensureFilmAccessOverlay();
-  const m = movieLockEnsureModal();
-  const ok = await movieLockCheckPin(code);
-  if (!ok) {
-    m.flash('PIN incorrect.');
-    return;
-  }
-  setFilmAccessGranted();
-  m.close();
-}
-
-// Lance un timer de 5 minutes quand on joue un film (si pas déverrouillé)
-function armFilmPreviewTimer(entry) {
-  if (!entry || !entry.url) return;
-
-  // si déjà déverrouillé : pas d'aperçu
-  if (hasFilmAccess()) {
-    clearFilmPreviewTimer();
-    return;
-  }
-
-  // éviter de ré-armer inutilement sur le même flux
-  if (filmPreviewArmedForUrl === entry.url && filmPreviewTimer) return;
-
-  clearFilmPreviewTimer();
-  filmPreviewArmedForUrl = entry.url;
-
-  const start = () => {
-    if (filmPreviewTimer) clearTimeout(filmPreviewTimer);
-
-    filmPreviewTimer = setTimeout(() => {
-      try {
-        // si entre temps c'est déverrouillé, on ne bloque pas
-        if (hasFilmAccess()) return;
-
-        setFilmPreviewExpired();
-        try { videoEl?.pause?.(); } catch {}
-
-        // demande PIN pour continuer, + reprise au currentTime
-        const t = (videoEl && Number.isFinite(videoEl.currentTime)) ? videoEl.currentTime : 0;
-        openFilmAccessOverlay({ resumeEntry: entry, resumeTime: t });
-
-        try { setStatus?.('Prévisualisation terminée : PIN requis pour continuer'); } catch {}
-      } catch (e) {
-        console.warn('Film preview timer error', e);
-      }
-    }, MOVIE_LOCK.previewSeconds * 1000);
-  };
-
-  // Démarre au vrai "playing" pour coller au temps de visionnage
-  const onPlaying = () => {
-    try { videoEl?.removeEventListener?.('playing', onPlaying); } catch {}
-    start();
-  };
-
-  if (videoEl && !videoEl.paused && !videoEl.ended) start();
-  else videoEl?.addEventListener?.('playing', onPlaying, { once: true });
-
-  try { setStatus?.('Prévisualisation film : 5 minutes avant PIN'); } catch {}
-}
-
-function updateFilmAccessBtnUI() {
-  const btn = document.getElementById('filmAccessBtn');
-  if (!btn) return;
-  const ok = hasFilmAccess();
-  btn.textContent = ok ? '🔓 Films' : '🔒 Films';
-  btn.title = ok ? 'Accès Films activé' : 'Accès Films';
-}
-
-// Utilisé au moment de jouer : si l’aperçu est “expiré”, on bloque jusqu’au PIN
-function maybeBlockFilmBecausePreviewExpired(entry) {
-  if (!MOVIE_LOCK.enabled) return false;
-  if (!isFilmEntry(entry)) return false;
-  if (hasFilmAccess()) return false;
-  if (!isFilmPreviewExpired()) return false;
-
-  openFilmAccessOverlay({ resumeEntry: entry, resumeTime: 0 });
-  return true;
-}
-
 // =====================================================
+
 // ✅ UID GLOBAL UNIQUE (PERSISTANT) + HELPERS ID/LOGO
 // =====================================================
 let uid = Number(localStorage.getItem('tronAresUid') || '0');
@@ -500,10 +148,6 @@ const subtitleTrackBtn = document.getElementById('subtitleTrackBtn');
 const audioTrackMenu = document.getElementById('audioTrackMenu');
 const subtitleTrackMenu = document.getElementById('subtitleTrackMenu');
 
-// --- Chromecast ---
-const castLauncher = document.getElementById('castLauncher');
-
-
 // --- Recherche ---
 const globalSearchInput = document.getElementById('globalSearchInput');
 const clearSearchBtn = document.getElementById('clearSearchBtn');
@@ -517,7 +161,8 @@ const radioAudio = new Audio(
 );
 radioAudio.preload = 'none';
 
-let radioPlaying = false;
+let radioPlaying = false; // true = overlay Luna ouvert
+let lunaIsPlaying = false; // état de lecture remonté par Luna
 let prevVideoMuted = false;
 let prevVideoVolume = 1;
 
@@ -525,6 +170,110 @@ let prevVideoVolume = 1;
 // RADIO OVERLAY LAYER (3e couche dans playerContainer)
 // =====================================================
 let radioOverlayLayer = null;
+// =====================================================
+// LUNA ↔ TRON : postMessage bridge (commande depuis #radioPlayBtn)
+// =====================================================
+let lunaReady = false;
+const lunaCmdQueue = [];
+
+function lunaGetIframeEl() {
+  const layer = ensureRadioOverlayLayer();
+  return layer ? layer.querySelector('#lunaIframe') : null;
+}
+
+function lunaGetTargetOrigin() {
+  const iframe = lunaGetIframeEl();
+  if (!iframe) return '*';
+  try {
+    const u = new URL(iframe.src, window.location.href);
+    return u.origin;
+  } catch {
+    return '*';
+  }
+}
+
+function lunaPost(cmd, payload = {}) {
+  const iframe = lunaGetIframeEl();
+  if (!iframe || !iframe.contentWindow) return;
+
+  const msg = {
+    __luna: 1,
+    from: 'tron-ares',
+    type: 'LUNA_CMD',
+    cmd,
+    payload
+  };
+
+  // si Luna n'a pas encore envoyé READY, on met en file
+  if (!lunaReady && cmd !== 'HELLO') {
+    lunaCmdQueue.push(msg);
+    return;
+  }
+
+  try {
+    iframe.contentWindow.postMessage(msg, lunaGetTargetOrigin());
+  } catch {
+    try { iframe.contentWindow.postMessage(msg, '*'); } catch {}
+  }
+}
+
+function lunaFlushQueue() {
+  if (!lunaCmdQueue.length) return;
+  const iframe = lunaGetIframeEl();
+  if (!iframe || !iframe.contentWindow) return;
+
+  const origin = lunaGetTargetOrigin();
+  while (lunaCmdQueue.length) {
+    const msg = lunaCmdQueue.shift();
+    try { iframe.contentWindow.postMessage(msg, origin); }
+    catch { try { iframe.contentWindow.postMessage(msg, '*'); } catch {} }
+  }
+}
+
+function lunaBindWindowMessageListenerOnce() {
+  if (window.__tronLunaPmBound) return;
+  window.__tronLunaPmBound = true;
+
+  window.addEventListener('message', (ev) => {
+    const iframe = lunaGetIframeEl();
+    if (!iframe || ev.source !== iframe.contentWindow) return;
+
+    const data = ev.data;
+    if (!data || data.__luna !== 1 || data.from !== 'luna') return;
+
+    if (data.type === 'LUNA_READY') {
+      lunaReady = true;
+      lunaFlushQueue();
+      // demande un état immédiat
+      lunaPost('GET_STATE');
+      return;
+    }
+
+    if (data.type === 'LUNA_STATE') {
+      lunaIsPlaying = !!data.playing;
+
+      // UI mini-radio = état lecture réel
+      miniRadioEl?.classList.toggle('playing', lunaIsPlaying);
+      if (radioPlayBtn) radioPlayBtn.textContent = lunaIsPlaying ? '⏸' : '▶';
+
+      // status optionnel
+      if (data.station && data.station.name) setStatus(`Luna • ${data.station.name}`);
+      return;
+    }
+
+    if (data.type === 'LUNA_AUTOPLAY_BLOCKED') {
+      setStatus('Luna • autoplay bloqué (clique dans le lecteur)');
+      // On montre "▶" pour inciter à relancer
+      if (radioPlayBtn) radioPlayBtn.textContent = '▶';
+      miniRadioEl?.classList.remove('playing');
+      lunaIsPlaying = false;
+      return;
+    }
+  });
+}
+
+lunaBindWindowMessageListenerOnce();
+
 
 function ensureRadioOverlayLayer() {
   if (radioOverlayLayer) return radioOverlayLayer;
@@ -537,94 +286,42 @@ function ensureRadioOverlayLayer() {
   layer.style.position = 'absolute';
   layer.style.inset = '0';
   layer.style.display = 'none';
-  layer.style.zIndex = '50';
+  layer.style.zIndex = '80';
   layer.style.pointerEvents = 'auto';
-  layer.style.background =
-    'radial-gradient(circle at 50% 35%, rgba(0,255,255,.12), rgba(0,0,0,.85) 60%)';
+  layer.style.background = 'rgba(0,0,0,.88)';
   layer.style.backdropFilter = 'blur(6px)';
 
   layer.innerHTML = `
-    <div style="height:100%; display:flex; align-items:center; justify-content:center; padding:18px;">
-      <div style="width:min(720px, 92vw); border:1px solid rgba(0,255,255,.25);
-                  border-radius:18px; padding:18px;
-                  box-shadow: 0 0 24px rgba(0,255,255,.12);
-                  background: linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.35));
+    <div style="height:100%; width:100%; display:flex; flex-direction:column;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;
+                  padding:10px 12px; border-bottom:1px solid rgba(0,255,255,.18);
                   font-family: Orbitron, system-ui, sans-serif;">
-        <div style="display:flex; gap:14px; align-items:center;">
-          <img src="https://vsalema.github.io/ipodfm/img/Radio_Alfa.png"
-               alt="Radio"
-               style="width:64px; height:64px; border-radius:14px; object-fit:cover;
-                      box-shadow: 0 0 14px rgba(255,145,0,.18); border:1px solid rgba(255,145,0,.35);" />
-          <div style="flex:1;">
-            <div style="font-size:18px; letter-spacing:.8px; color:rgba(255,255,255,.95);">
-              Radio R.Alfa
-            </div>
-            <div style="margin-top:4px; font-size:12px; color:rgba(200,240,255,.75);">
-              <p style="color: #ff9100;">(Pop)</p> Mode Radio (dans le player)
-            </div>
-          </div>
-
-          <button id="radioOverlayBackBtn"
-                  style="border:1px solid rgba(0,255,255,.28);
-                         background: rgba(0,0,0,.25);
-                         color: rgba(230,255,255,.92);
-                         border-radius:12px;
-                         padding:10px 12px;
-                         cursor:pointer;">
-            ⤺ Retour diffusion
-          </button>
-        </div>
-
-        <div style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
-          <div style="display:flex; gap:10px; align-items:center;">
-            <button id="radioOverlayPlayPauseBtn"
-                    style="border:1px solid rgba(255,145,0,.35);
-                           background: rgba(255,145,0,.12);
-                           color: rgba(255,255,255,.92);
-                           border-radius:14px;
-                           padding:12px 16px;
-                           cursor:pointer; font-weight:700;">
-              ⏸ Pause
-            </button>
-
-            <div style="display:flex; gap:6px; align-items:flex-end; height:28px;">
-              <span class="rovb" style="width:6px; height:10px; background:rgba(0,255,255,.7); border-radius:2px;"></span>
-              <span class="rovb" style="width:6px; height:18px; background:rgba(0,255,255,.7); border-radius:2px;"></span>
-              <span class="rovb" style="width:6px; height:14px; background:rgba(0,255,255,.7); border-radius:2px;"></span>
-              <span class="rovb" style="width:6px; height:22px; background:rgba(0,255,255,.7); border-radius:2px;"></span>
-            </div>
-          </div>
-
-          <div style="font-size:10px; color:rgba(255,255,255,.7);">
-            Radio Alfa est une station de radio s'adressant à la communauté lusophone en France.
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div style="width:10px; height:10px; border-radius:50%; background:rgba(0,255,255,.8);
+                      box-shadow:0 0 14px rgba(0,255,255,.45);"></div>
+          <div style="font-size:13px; letter-spacing:.08em; color:rgba(230,255,255,.92);
+                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            LUNA AUDIO PLAYER
           </div>
         </div>
+        <button id="lunaCloseBtn"
+                style="appearance:none; border:1px solid rgba(0,255,255,.28);
+                       background:rgba(0,0,0,.35); color:rgba(230,255,255,.92);
+                       border-radius:12px; padding:8px 10px; cursor:pointer;
+                       font-family: Orbitron, system-ui, sans-serif;">
+          ✕
+        </button>
+      </div>
+
+      <div style="flex:1 1 auto; min-height:0;">
+        <iframe id="lunaIframe"
+                title="Luna Player"
+                src="about:blank"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                style="width:100%; height:100%; border:0; display:block;"></iframe>
       </div>
     </div>
   `;
-
-  let animTimer = null;
-  function startBars() {
-    stopBars();
-    animTimer = setInterval(() => {
-      const bars = layer.querySelectorAll('.rovb');
-      bars.forEach(b => {
-        const h = 8 + Math.floor(Math.random() * 22);
-        b.style.height = h + 'px';
-        b.style.opacity = (0.45 + Math.random() * 0.55).toFixed(2);
-      });
-    }, 140);
-  }
-  function stopBars() {
-    if (animTimer) clearInterval(animTimer);
-    animTimer = null;
-  }
-
-  layer.__startBars = startBars;
-  layer.__stopBars = stopBars;
-
-  const cs = window.getComputedStyle(host);
-  if (cs.position === 'static') host.style.position = 'relative';
 
   host.appendChild(layer);
   radioOverlayLayer = layer;
@@ -636,40 +333,55 @@ function showRadioOverlayInPlayer() {
   if (!layer) return;
 
   layer.style.display = 'block';
-  layer.__startBars?.();
 
-  const backBtn = layer.querySelector('#radioOverlayBackBtn');
-  const ppBtn = layer.querySelector('#radioOverlayPlayPauseBtn');
-
-  backBtn.onclick = () => stopRadioAndRestore();
-
-  ppBtn.onclick = () => {
-    if (!radioAudio) return;
-    if (radioAudio.paused) {
-      radioAudio.play().then(() => {
-        radioPlaying = true;
-        if (radioPlayBtn) radioPlayBtn.textContent = '⏸';
-        miniRadioEl?.classList.add('playing');
-        ppBtn.textContent = '⏸ Pause';
-        setStatus('Radio R.Alfa en lecture');
-        layer.__startBars?.();
-      }).catch(() => {});
-    } else {
-      radioAudio.pause();
-      radioPlaying = false;
-      if (radioPlayBtn) radioPlayBtn.textContent = '▶';
-      miniRadioEl?.classList.remove('playing');
-      ppBtn.textContent = '▶ Play';
-      setStatus('Radio en pause');
-      layer.__stopBars?.();
+  const iframe = layer.querySelector('#lunaIframe');
+  if (iframe) {
+    const url =
+      (radioPlayBtn && radioPlayBtn.dataset && radioPlayBtn.dataset.lunaUrl) ? radioPlayBtn.dataset.lunaUrl :
+      (playerContainer && playerContainer.dataset && playerContainer.dataset.lunaUrl) ? playerContainer.dataset.lunaUrl :
+      ((typeof window !== 'undefined' && window.LUNA_URL_OVERRIDE) ? window.LUNA_URL_OVERRIDE : 'index.html');
+    if (!iframe.src || iframe.src === 'about:blank' || iframe.dataset.loaded !== '1') {
+      iframe.src = url;
+      iframe.dataset.loaded = '1';
     }
-  };
+// postMessage: on réinitialise READY quand on (re)charge Luna, puis handshake
+if (!iframe.dataset.pmBound) {
+  iframe.dataset.pmBound = '1';
+  iframe.addEventListener('load', () => {
+    lunaReady = false;
+    lunaPost('HELLO'); // Luna répond READY + STATE
+  });
+} else {
+  // si déjà bound, on tente un HELLO immédiat
+  lunaPost('HELLO');
+}
+
+  }
+
+  const closeBtn = layer.querySelector('#lunaCloseBtn');
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      stopRadioAndRestore();
+    };
+  }
+
+  setStatus('Luna');
 }
 
 function hideRadioOverlayInPlayer() {
-  if (!radioOverlayLayer) return;
-  radioOverlayLayer.__stopBars?.();
-  radioOverlayLayer.style.display = 'none';
+  const layer = ensureRadioOverlayLayer();
+  if (!layer) return;
+
+  // Stop audio inside the iframe by unloading it
+  try {
+    const iframe = layer.querySelector('#lunaIframe');
+    if (iframe) {
+      iframe.src = 'about:blank';
+      iframe.dataset.loaded = '0';
+    }
+  } catch {}
+
+  layer.style.display = 'none';
 }
 
 // Masquer les contrôles pistes au démarrage
@@ -681,261 +393,6 @@ npTracks?.classList.add('hidden');
 function setStatus(text) {
   if (statusPill) statusPill.textContent = text;
 }
-
-// =====================================================
-// CHROMECAST (Google Cast) — cast du flux en cours
-// ✅ Détecte la disponibilité Chromecast (à proximité)
-// ✅ Lance/arrête un cast
-// ⚠️ On ne peut pas « caster la page » depuis un site web :
-//    Chromecast ne reçoit que des URLs média (HLS/DASH/MP4/MP3…)
-//    Pour caster l’onglet/page entière → menu Chrome “Caster…”
-// =====================================================
-const CAST = {
-  frameworkReady: false,
-  castState: 'NO_DEVICES_AVAILABLE',
-  sessionState: null,
-  isConnected: false,
-  lastLoadedUrl: null,
-};
-
-function _castHasFramework() {
-  return typeof window.cast !== 'undefined' &&
-         window.cast &&
-         window.cast.framework &&
-         typeof window.chrome !== 'undefined' &&
-         window.chrome &&
-         window.chrome.cast;
-}
-
-function updateCastButtonUI() {
-  if (!castLauncher) return;
-
-  castLauncher.classList.remove('cast-disabled','cast-available','cast-connecting','cast-connected');
-
-  // Par défaut : désactivé
-  let disabled = true;
-  let label = 'Chromecast indisponible';
-
-  if (_castHasFramework() && CAST.frameworkReady) {
-    const cs = CAST.castState;
-
-    if (cs === cast.framework.CastState.NO_DEVICES_AVAILABLE) {
-      disabled = true;
-      label = 'Aucun Chromecast détecté';
-    } else if (cs === cast.framework.CastState.CONNECTING) {
-      disabled = false;
-      label = 'Connexion Chromecast…';
-      castLauncher.classList.add('cast-connecting','cast-available');
-    } else if (cs === cast.framework.CastState.CONNECTED) {
-      disabled = false;
-      label = 'Casting en cours — cliquer pour arrêter';
-      castLauncher.classList.add('cast-connected');
-    } else {
-      // NOT_CONNECTED (devices dispo) ou état inconnu
-      disabled = false;
-      label = 'Caster sur Chromecast';
-      castLauncher.classList.add('cast-available');
-    }
-  } else {
-    disabled = true;
-    label = 'Chromecast indisponible (Chrome/Edge requis)';
-  }
-
-  castLauncher.title = label;
-  castLauncher.setAttribute('aria-label', label);
-
-  if (disabled) {
-    castLauncher.classList.add('cast-disabled');
-    castLauncher.setAttribute('aria-disabled', 'true');
-  } else {
-    castLauncher.removeAttribute('aria-disabled');
-  }
-}
-
-function guessCastContentType(url) {
-  const u = String(url || '').toLowerCase();
-
-  if (u.includes('.m3u8')) return 'application/x-mpegURL';
-  if (u.includes('.mpd'))  return 'application/dash+xml';
-  if (u.match(/\.(mp4|m4v)(\?|#|$)/)) return 'video/mp4';
-  if (u.match(/\.(webm)(\?|#|$)/))    return 'video/webm';
-  if (u.match(/\.(mp3)(\?|#|$)/))     return 'audio/mpeg';
-  if (u.match(/\.(aac)(\?|#|$)/))     return 'audio/aac';
-  if (u.match(/\.(m4a)(\?|#|$)/))     return 'audio/mp4';
-  if (u.match(/\.(ogg|oga)(\?|#|$)/)) return 'audio/ogg';
-  if (u.match(/\.(ts)(\?|#|$)/))      return 'video/mp2t';
-
-  // fallback : beaucoup de flux IPTV ne donnent pas l’extension.
-  // on laisse une valeur "générique" vidéo, le receiver tentera de lire.
-  return 'video/mp4';
-}
-
-function guessCastStreamType(url) {
-  const u = String(url || '').toLowerCase();
-  if (u.includes('.m3u8') || u.includes('.mpd') || u.includes('live') || u.includes('manifest')) {
-    return chrome.cast.media.StreamType.LIVE;
-  }
-  return chrome.cast.media.StreamType.BUFFERED;
-}
-
-function buildCastLoadRequest() {
-  if (!currentEntry || !currentEntry.url) {
-    return { ok:false, reason:'Aucun flux en cours.' };
-  }
-
-  // iFrame / YouTube : pas casterable via Default Media Receiver
-  if (currentEntry.isIframe || isYoutubeUrl(currentEntry.url) || activePlaybackMode === 'iframe') {
-    return { ok:false, reason:'Ce contenu (iFrame/YouTube) ne peut pas être casté directement.' };
-  }
-
-  const url = String(currentEntry.url);
-
-  // Fichiers locaux / blob
-  if (/^(blob:|file:|data:)/i.test(url)) {
-    return { ok:false, reason:'Un fichier local / blob ne peut pas être casté (Chromecast doit accéder à une URL HTTP(S)).' };
-  }
-
-  const contentType = guessCastContentType(url);
-  const mediaInfo = new chrome.cast.media.MediaInfo(url, contentType);
-
-  mediaInfo.streamType = guessCastStreamType(url);
-
-  // Métadonnées (titre/logo)
-  try {
-    const meta = new chrome.cast.media.GenericMediaMetadata();
-    meta.title = normalizeName(currentEntry.name || 'Lecture');
-    const logo = currentEntry.logo || deriveLogoFromName(currentEntry.name);
-    if (logo && logo.type === 'image' && typeof logo.value === 'string' && /^https?:\/\//i.test(logo.value)) {
-      meta.images = [ new chrome.cast.Image(logo.value) ];
-    }
-    mediaInfo.metadata = meta;
-  } catch {}
-
-  const req = new chrome.cast.media.LoadRequest(mediaInfo);
-  req.autoplay = true;
-
-  // reprise (uniquement si contenu buffered)
-  try {
-    if (videoEl && Number.isFinite(videoEl.currentTime) && mediaInfo.streamType === chrome.cast.media.StreamType.BUFFERED) {
-      req.currentTime = Math.max(0, Number(videoEl.currentTime) || 0);
-    }
-  } catch {}
-
-  return { ok:true, request:req, url };
-}
-
-async function castLoadCurrentEntry(silent = false) {
-  if (!_castHasFramework() || !CAST.frameworkReady) {
-    if (!silent) setStatus('Chromecast indisponible');
-    return false;
-  }
-
-  const ctx = cast.framework.CastContext.getInstance();
-  const session = ctx.getCurrentSession();
-
-  if (!session) {
-    if (!silent) setStatus('Chromecast : aucune session');
-    return false;
-  }
-
-  const built = buildCastLoadRequest();
-  if (!built.ok) {
-    if (!silent) setStatus('Chromecast : ' + built.reason);
-    return false;
-  }
-
-  // Évite de recharger la même URL en boucle
-  if (CAST.lastLoadedUrl === built.url && silent) return true;
-
-  try {
-    await session.loadMedia(built.request);
-    CAST.lastLoadedUrl = built.url;
-
-    // côté local : on coupe pour éviter double son
-    try { videoEl?.pause(); } catch {}
-
-    if (!silent) setStatus('Chromecast : diffusion lancée');
-    return true;
-  } catch (e) {
-    console.warn('Chromecast loadMedia error', e);
-    if (!silent) setStatus('Chromecast : impossible de diffuser ce flux');
-    return false;
-  }
-}
-
-// Bind UI
-if (castLauncher) {
-  updateCastButtonUI(); // état initial
-}
-
-// Callback appelé par le SDK Cast
-window.__onGCastApiAvailable = function(isAvailable) {
-  if (!isAvailable) {
-    CAST.frameworkReady = false;
-    updateCastButtonUI();
-    return;
-  }
-
-  try {
-    const ctx = cast.framework.CastContext.getInstance();
-    const DEFAULT_RECEIVER_APP_ID =
-      (cast.framework && cast.framework.CastContext && cast.framework.CastContext.DEFAULT_MEDIA_RECEIVER_APP_ID)
-      ? cast.framework.CastContext.DEFAULT_MEDIA_RECEIVER_APP_ID
-      : 'CC1AD845'; // Default Media Receiver (fallback)
-
-    ctx.setOptions({
-      receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
-      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
-    });
-
-    // Debug (décommente si besoin)
-    // cast.framework.Logger.setLevel(cast.framework.LoggerLevel.DEBUG);
-CAST.frameworkReady = true;
-    CAST.castState = ctx.getCastState();
-
-    ctx.addEventListener(
-      cast.framework.CastContextEventType.CAST_STATE_CHANGED,
-      (e) => {
-        CAST.castState = e.castState;
-        updateCastButtonUI();
-      }
-    );
-
-    ctx.addEventListener(
-      cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-      (e) => {
-        CAST.sessionState = e.sessionState;
-        CAST.isConnected = (
-          e.sessionState === cast.framework.SessionState.SESSION_STARTED ||
-          e.sessionState === cast.framework.SessionState.SESSION_RESUMED
-        );
-
-        updateCastButtonUI();
-
-        // Si session connectée, on tente de diffuser le flux courant
-        if (CAST.isConnected) {
-          castLoadCurrentEntry(true);
-        }
-      }
-    );
-
-    updateCastButtonUI();
-  } catch (e) {
-    console.warn('Chromecast init error', e);
-    CAST.frameworkReady = false;
-    updateCastButtonUI();
-  }
-};
-
-// CAST: init immédiat si déjà dispo (si le SDK s’est chargé avant la callback)
-try{
-  if (_castHasFramework() && typeof window.__onGCastApiAvailable === 'function' && window.cast && window.cast.framework) {
-    // Some builds set chrome.cast.isAvailable, others rely on cast.framework presence
-    window.__onGCastApiAvailable(true);
-  }
-}catch{}
-
-
 // =====================================================
 // STREAM URL (Akamai-style)
 // =====================================================
@@ -1153,38 +610,75 @@ function restorePlaybackAfterRadio() {
 }
 
 function stopRadioAndRestore() {
+  // stop Luna (si présent)
+  try { lunaPost('PAUSE'); } catch {}
   try { radioAudio?.pause(); } catch {}
+
+  lunaIsPlaying = false;
+  lunaReady = false;
+
   radioPlaying = false;
   if (radioPlayBtn) radioPlayBtn.textContent = '▶';
   miniRadioEl?.classList.remove('playing');
+
   restorePlaybackAfterRadio();
 }
+// Stop Luna sans restaurer l'ancien flux (utilisé quand on relance une chaîne/film)
+function stopLunaOverlayHard() {
+  try { lunaPost('PAUSE'); } catch {}
+  try { radioAudio?.pause(); } catch {}
+
+  lunaIsPlaying = false;
+  lunaReady = false;
+
+  radioPlaying = false;
+  if (radioPlayBtn) radioPlayBtn.textContent = '▶';
+  miniRadioEl?.classList.remove('playing');
+
+  // Ferme l'overlay (sans appeler restorePlaybackAfterRadio)
+  hideRadioOverlayInPlayer();
+  lastPlaybackSnapshot = null;
+
+  try {
+    if (videoEl) {
+      videoEl.muted = prevVideoMuted;
+      videoEl.volume = prevVideoVolume;
+    }
+  } catch {}
+}
+
+
 
 if (miniRadioEl && radioPlayBtn) {
   radioPlayBtn.addEventListener('click', () => {
+    // 1er clic : ouvre Luna en overlay + lance la 1ère station (RADIO ALFA)
     if (!radioPlaying) {
       lastPlaybackSnapshot = snapshotCurrentPlayback();
+
+      // Stoppe la lecture actuelle (video/iframe) et ouvre l'overlay Luna
       stopPlaybackForRadio(lastPlaybackSnapshot);
 
-      radioAudio.play()
-        .then(() => {
-          radioPlaying = true;
-          radioPlayBtn.textContent = '⏸';
-          miniRadioEl.classList.add('playing');
-          setStatus('Radio R.Alfa en lecture');
-        })
-        .catch(err => {
-          console.error('Erreur lecture radio', err);
-          setStatus('Erreur radio');
-          stopRadioAndRestore();
-        });
-    } else {
-      stopRadioAndRestore();
-    }
-  });
+      radioPlaying = true; // overlay ouvert
 
-  radioAudio.addEventListener('ended', () => stopRadioAndRestore());
+      // Commande Luna: station 0 (RADIO ALFA) + play
+      lunaPost('PLAY_STATION', {
+        stationIndex: 0,
+        stationKey: 'RADIO_ALFA',
+        stationName: 'RADIO ALFA'
+      });
+
+      // UI optimiste (Luna renverra LUNA_STATE)
+      miniRadioEl.classList.add('playing');
+      if (radioPlayBtn) radioPlayBtn.textContent = '⏸';
+      setStatus('Luna • RADIO ALFA');
+      return;
+    }
+
+    // overlay déjà ouvert => stop radio + restaurer la diffusion précédente
+    stopRadioAndRestore();
+  });
 }
+
 
 // =====================================================
 // RENDERING
@@ -1535,6 +1029,7 @@ function updateNowPlayingCounter() {
 // =====================================================
 // PISTES AUDIO / SOUS-TITRES (HLS) - MOVIE CONTEXT
 // =====================================================
+
 function closeAllTrackMenus() {
   audioTrackMenu?.classList.remove('open');
   subtitleTrackMenu?.classList.remove('open');
@@ -1559,17 +1054,21 @@ function buildAudioTrackMenu() {
 
     const label = document.createElement('div');
     label.className = 'np-track-item-label';
-    label.textContent = t.name || t.lang || ('Piste ' + (idx + 1));
+    label.textContent = t?.name || t?.lang || ('Piste ' + (idx + 1));
 
     const meta = document.createElement('div');
     meta.className = 'np-track-item-meta';
-    meta.textContent = (t.lang || '').toUpperCase();
+    meta.textContent = (t?.lang || '').toUpperCase();
 
     item.append(label, meta);
     item.addEventListener('click', () => {
-      hlsInstance.audioTrack = idx;
+      try { hlsInstance.audioTrack = idx; } catch {}
+      activeAudioIndex = idx;
+
+      // UI immédiate (et Hls.Events.* refreshTrackMenus maintient le sync)
       buildAudioTrackMenu();
       closeAllTrackMenus();
+      audioTrackBtn?.classList.toggle('active', activeAudioIndex !== -1);
     });
 
     audioTrackMenu.appendChild(item);
@@ -1585,16 +1084,18 @@ function buildSubtitleTrackMenu() {
   let tracks = [];
   let activeIndex = -1;
 
+  // 1) Sous-titres HLS (si dispo)
   if (hlsInstance && Array.isArray(hlsInstance.subtitleTracks) && hlsInstance.subtitleTracks.length > 0) {
     useHls = true;
     tracks = hlsInstance.subtitleTracks;
-    activeIndex = hlsInstance.subtitleTrack;
+    activeIndex = Number.isFinite(hlsInstance.subtitleTrack) ? hlsInstance.subtitleTrack : -1;
   } else {
+    // 2) Fallback : <track> / textTracks
     const tt = Array.from(videoEl.textTracks || []).filter(t =>
       t.kind === 'subtitles' || t.kind === 'captions'
     );
     tracks = tt;
-    if (tt.length) activeIndex = tt.findIndex(t => t.mode === 'showing');
+    activeIndex = tt.findIndex(t => t.mode === 'showing');
   }
 
   activeSubtitleIndex = activeIndex;
@@ -1604,26 +1105,34 @@ function buildSubtitleTrackMenu() {
   header.textContent = 'Sous-titres';
   subtitleTrackMenu.appendChild(header);
 
+  // OFF
   const offItem = document.createElement('div');
   offItem.className = 'np-track-item';
   if (activeIndex === -1) offItem.classList.add('active');
 
   const offLabel = document.createElement('div');
   offLabel.className = 'np-track-item-label';
-  offLabel.textContent = 'Aucun';
-  offItem.appendChild(offLabel);
+  offLabel.textContent = 'OFF';
+
+  const offMeta = document.createElement('div');
+  offMeta.className = 'np-track-item-meta';
+  offMeta.textContent = '';
+
+  offItem.append(offLabel, offMeta);
 
   offItem.addEventListener('click', () => {
     if (useHls && hlsInstance) {
-      hlsInstance.subtitleTrack = -1;
-    } else {
-      Array.from(videoEl.textTracks || []).forEach(t => {
-        if (t.kind === 'subtitles' || t.kind === 'captions') t.mode = 'disabled';
-      });
+      try { hlsInstance.subtitleTrack = -1; } catch {}
     }
+
+    Array.from(videoEl.textTracks || []).forEach(t => {
+      if (t.kind === 'subtitles' || t.kind === 'captions') t.mode = 'disabled';
+    });
+
     activeSubtitleIndex = -1;
     buildSubtitleTrackMenu();
     closeAllTrackMenus();
+    subtitleTrackBtn?.classList.toggle('active', activeSubtitleIndex !== -1);
   });
 
   subtitleTrackMenu.appendChild(offItem);
@@ -1636,6 +1145,7 @@ function buildSubtitleTrackMenu() {
     return;
   }
 
+  // Tracks
   tracks.forEach((t, idx) => {
     const item = document.createElement('div');
     item.className = 'np-track-item';
@@ -1643,28 +1153,29 @@ function buildSubtitleTrackMenu() {
 
     const label = document.createElement('div');
     label.className = 'np-track-item-label';
-    label.textContent = t.name || t.label || t.lang || t.language || ('Sous-titres ' + (idx + 1));
+    label.textContent =
+      t?.name || t?.label || t?.lang || t?.language || ('Sous-titres ' + (idx + 1));
 
     const meta = document.createElement('div');
     meta.className = 'np-track-item-meta';
-    meta.textContent = (t.lang || t.language || '').toUpperCase();
+    meta.textContent = (t?.lang || t?.language || '').toUpperCase();
 
     item.append(label, meta);
 
     item.addEventListener('click', () => {
       if (useHls && hlsInstance) {
-        hlsInstance.subtitleTrack = idx;
+        try { hlsInstance.subtitleTrack = idx; } catch {}
       } else {
-        const vt = Array.from(videoEl.textTracks || []);
-        vt.forEach((track, i) => {
-          if (track.kind === 'subtitles' || track.kind === 'captions') {
-            track.mode = (i === idx ? 'showing' : 'disabled');
-          }
-        });
+        const tt = Array.from(videoEl.textTracks || []).filter(x =>
+          x.kind === 'subtitles' || x.kind === 'captions'
+        );
+        tt.forEach((x, j) => { x.mode = (j === idx ? 'showing' : 'disabled'); });
       }
+
       activeSubtitleIndex = idx;
       buildSubtitleTrackMenu();
       closeAllTrackMenus();
+      subtitleTrackBtn?.classList.toggle('active', activeSubtitleIndex !== -1);
     });
 
     subtitleTrackMenu.appendChild(item);
@@ -1690,14 +1201,16 @@ function refreshTrackMenus() {
   updateTrackControlsVisibility();
 
   if (hlsInstance && Array.isArray(hlsInstance.audioTracks) && hlsInstance.audioTracks.length) {
-    activeAudioIndex = hlsInstance.audioTrack ?? -1;
+    activeAudioIndex = Number.isFinite(hlsInstance.audioTrack) ? hlsInstance.audioTrack : -1;
   } else {
     activeAudioIndex = -1;
   }
 
-  if (audioTrackBtn) audioTrackBtn.classList.toggle('active', activeAudioIndex !== -1);
-  if (subtitleTrackBtn) subtitleTrackBtn.classList.toggle('active', activeSubtitleIndex !== -1);
+  // activeSubtitleIndex est mis à jour dans buildSubtitleTrackMenu()
+  audioTrackBtn?.classList.toggle('active', activeAudioIndex !== -1);
+  subtitleTrackBtn?.classList.toggle('active', activeSubtitleIndex !== -1);
 }
+
 
 // =====================================================
 // PLAYER LOGIC
@@ -1789,28 +1302,9 @@ function fallbackToExternalPlayer(entry) {
 function playUrl(entry) {
   if (!entry || !entry.url || !videoEl) return;
 
-  // 🔒 Films : si l’aperçu est terminé et pas déverrouillé, on bloque jusqu’au PIN
-  if (isFilmEntry(entry)) {
-    if (maybeBlockFilmBecausePreviewExpired(entry)) {
-      try { setStatus('Accès Films requis'); } catch {}
-      return;
-    }
-  } else {
-    // si on quitte l'onglet films, on stoppe le timer d'aperçu
-    clearFilmPreviewTimer();
-  }
-
-  // stop radio si elle joue
-  if (typeof radioAudio !== 'undefined' && radioPlaying) {
-    try { radioAudio.pause(); } catch {}
-    radioPlaying = false;
-    if (radioPlayBtn) radioPlayBtn.textContent = '▶';
-    miniRadioEl?.classList.remove('playing');
-    hideRadioOverlayInPlayer();
-    try {
-      videoEl.muted = prevVideoMuted;
-      videoEl.volume = prevVideoVolume;
-    } catch {}
+  // stop Luna si l'overlay est ouvert
+  if (radioPlaying) {
+    stopLunaOverlayHard();
   }
 
   currentEntry = entry;
@@ -1921,23 +1415,8 @@ function playUrl(entry) {
   };
 
   videoEl.play().catch(() => {});
-
-  // 🔒 démarre le timer d'aperçu (5 min) uniquement pour les Films si pas d'accès
-  if (isFilmEntry(entry) && !hasFilmAccess()) {
-    armFilmPreviewTimer(entry);
-  } else {
-    clearFilmPreviewTimer();
-  }
-
   updateNowPlaying(entry, modeLabel);
   setStatus('Lecture en cours');
-
-  // Chromecast: si une session est connectée, on tente d’envoyer le nouveau flux
-  try {
-    if (typeof CAST !== 'undefined' && CAST.isConnected) {
-      castLoadCurrentEntry(true);
-    }
-  } catch {}
 
   refreshActiveListsUI();
   if (favoriteListEl?.classList.contains('active')) renderFavoritesList();
@@ -2482,15 +1961,6 @@ if (clearSearchBtn && globalSearchInput) {
 }
 
 
-// Bouton 🔒 Films (ouvre le modal d'accès)
-const filmAccessBtn = document.getElementById('filmAccessBtn');
-if (filmAccessBtn) {
-  updateFilmAccessBtnUI();
-  filmAccessBtn.addEventListener('click', (ev) => {
-    ev.preventDefault();
-    openFilmAccessOverlay();
-  });
-}
 
 // Sections repliables
 document.querySelectorAll('.loader-section .collapsible-label').forEach(label => {
