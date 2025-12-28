@@ -1229,6 +1229,14 @@ function buildAudioTrackMenu() {
   }
 
   activeAudioIndex = currentIndex;
+  // Build a simple language frequency map so we don't show internal ids when a language is unique
+  const langCounts = {};
+  (tracks || []).forEach((t) => {
+    const l = (t && (t.lang || t.language || t.idLanguage))
+      ? String(t.lang || t.language || t.idLanguage).trim().toLowerCase()
+      : "";
+    if (l) langCounts[l] = (langCounts[l] || 0) + 1;
+  });
 
   // No tracks
   if (!tracks || tracks.length === 0) {
@@ -1285,6 +1293,7 @@ function buildAudioTrackMenu() {
       metaEl.textContent = parts.join(' • ');
     } else if (provider === 'dash') {
       const lang = (track && (track.lang || track.language) ? String(track.lang || track.language) : '').trim();
+      const langKey = lang ? lang.toLowerCase() : "";
       const roles = (track && Array.isArray(track.roles)) ? track.roles.filter(Boolean) : [];
 
       // Prefer label, then lang, then id
@@ -1295,7 +1304,7 @@ function buildAudioTrackMenu() {
       if (rawLabel && lang && !rawLabel.toLowerCase().includes(lang.toLowerCase())) {
         label = `${rawLabel} (${lang})`;
       } else if (!rawLabel && rawId && lang) {
-        label = `${lang} (${rawId})`;
+        label = (langKey && langCounts[langKey] > 1) ? `${lang} (${rawId})` : lang;
       }
 
       labelEl.textContent = label;
