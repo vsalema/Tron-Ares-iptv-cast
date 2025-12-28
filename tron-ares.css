@@ -701,7 +701,7 @@ video,
   background: radial-gradient(circle at center, #02050a 0, #000 65%);
 }
 
-video { object-fit: contain; }
+video { object-fit: fill; }
 
 .iframe-overlay {
   position: absolute;
@@ -1588,7 +1588,7 @@ body.theme-redblue .np-logo img {
 
   .player-shell {
     flex: 0 0 auto;
-    height: 52vh;
+    height: 65vh;
     min-height: 0;
   }
 
