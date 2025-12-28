@@ -1013,14 +1013,6 @@ video { object-fit: contain; }
   align-items: center;
 }
 
-.film-access-btn {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 11px;
-  line-height: 28px;
-  white-space: nowrap;
-}
-
 
 .clear-search-btn {
   position: absolute;

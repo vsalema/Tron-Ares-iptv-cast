@@ -28,9 +28,6 @@ const frChannels = [];    // Liste M3U FR
 const channels = [];      // Liste M3U principale
 const iframeItems = [];   // Overlays / iFrames
 
-
-
-// =====================================================
 // ✅ UID GLOBAL UNIQUE (PERSISTANT) + HELPERS ID/LOGO
 // =====================================================
 let uid = Number(localStorage.getItem('tronAresUid') || '0');
@@ -1432,8 +1429,6 @@ function fallbackToExternalPlayer(entry) {
 function playUrl(entry) {
   if (!entry || !entry.url || !videoEl) return;
 
-  
-
   // stop radio si elle joue
   if (typeof radioAudio !== 'undefined' && radioPlaying) {
     try { radioAudio.pause(); } catch {}
@@ -1537,17 +1532,7 @@ function playUrl(entry) {
         videoEl.currentTime = savedPos;
       }
 
-      // ✅ reprise après déverrouillage Films (best-effort)
-      try {
-        if (pendingFilmResume && pendingFilmResume.url === entry.url) {
-          const t = Number(pendingFilmResume.time || 0);
-          pendingFilmResume = null;
-          if (isFinite(t) && t > 0) {
-            // léger offset pour éviter d'être exactement sur une limite de segment
-            videoEl.currentTime = Math.max(0, t - 0.2);
-          }
-        }
-      } catch {}
+
     } catch (e) {
       console.warn('Erreur reprise position', e);
     }
@@ -1555,13 +1540,6 @@ function playUrl(entry) {
   };
 
   videoEl.play().catch(() => {});
-
-  // 🔒 démarre le timer d'aperçu (5 min) uniquement pour les Films si pas d'accès
-  if (isFilmEntry(entry) && !hasFilmAccess()) {
-    armFilmPreviewTimer(entry);
-  } else {
-    clearFilmPreviewTimer();
-  }
 
   updateNowPlaying(entry, modeLabel);
   setStatus('Lecture en cours');
@@ -2116,15 +2094,6 @@ if (clearSearchBtn && globalSearchInput) {
 }
 
 
-// Bouton 🔒 Films (ouvre le modal d'accès)
-const filmAccessBtn = document.getElementById('filmAccessBtn');
-if (filmAccessBtn) {
-  updateFilmAccessBtnUI();
-  filmAccessBtn.addEventListener('click', (ev) => {
-    ev.preventDefault();
-    openFilmAccessOverlay();
-  });
-}
 
 // Sections repliables
 document.querySelectorAll('.loader-section .collapsible-label').forEach(label => {
