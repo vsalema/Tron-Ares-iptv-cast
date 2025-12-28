@@ -24,7 +24,7 @@
     </div>
 <div class="tabs">
   <button class="tab-btn" data-tab="fr">
-    <span class="flag flag-fr" aria-hidden="true"></span>Chaînes FR M3U
+    <span>🇫🇷</span>Chaînes FR M3U
   </button>
 
   <button class="tab-btn active" data-tab="channels">
@@ -32,7 +32,7 @@
   </button>
 
   <button class="tab-btn" data-tab="iframes">
-    <span class="flag flag-pt" aria-hidden="true"></span> port / iFrame
+    <span>■</span> 🇵🇹 port / iFrame
   </button>
 
   <button class="tab-btn" data-tab="favorites">
@@ -46,10 +46,8 @@
              placeholder="Rechercher (toutes listes)…" />
       <button id="clearSearchBtn" class="clear-search-btn">✖</button>
     </div>
-
-    <button class="btn btn-ghost film-access-btn" id="filmAccessBtn" title="Accès Films">🔒 Films</button>
-  </div>
-</div>
+    </div>
+    </div>
 <!-- Mini player radio R.Alfa -->
 <div id="miniRadioPlayer" class="mini-radio">
   <img class="mini-radio-logo" src="https://vsalema.github.io/ipodfm/img/Radio_Alfa.png">
@@ -67,10 +65,10 @@
     <span class="mini-radio-viz-bar"></span>
   </div>
 
-  <button id="radioPlayBtn" class="mini-radio-btn">▶</button>
+  <button id="radioPlayBtn" class="mini-radio-btn" data-luna-url="https://vsalema.github.io/luna/">▶</button>
 </div>
-
-<div class="lists-container">
+  
+    <div class="lists-container">
   <div class="scroll-fade"></div>
 
   <!-- FR d'abord et active -->
@@ -157,7 +155,7 @@
 
       <!-- Banner tron Ares centré (ne change pas la hauteur) -->
       <div class="top-bar-banner">
-        <img src="https://vsalema.github.io/tvpt4/css/ChatGPT Image 6 déc. 2025, 19_05_13.png"
+        <img src="https://vsalema.github.io/tvpt4/css/tron3.png"
              alt="Tron Ares IPTV Player"
              class="banner-img">
       </div>
@@ -170,9 +168,7 @@
         <button class="btn btn-ghost" id="toggleOverlayBtn">Vidéo / iFrame</button>
         <button class="btn btn-ghost" id="fullPageBtn">Plein écran</button>
         <button class="toggle-sidebar-btn" id="toggleSidebarBtn" aria-label="Menu sidebar">
-          <span class="burger-left">☰</span>
           <span class="burger-center"></span>
-          <span class="burger-right">☰</span>
         </button>
       </div>
     </div>
@@ -229,10 +225,13 @@
   <div class="np-badge" id="npBadge">IDLE</div>
   <div class="np-counter" id="npCounter">-/-</div>
 
-  <!-- Chromecast -->
+  <!-- Actions (Cast, etc.) -->
   <div class="np-actions" id="npActions">
-    <google-cast-launcher class="icon-btn np-action-btn cast-launcher" id="castLauncher"
-      title="Chromecast" aria-label="Chromecast"></google-cast-launcher>
+    <google-cast-launcher
+      id="castLauncher"
+      class="icon-btn np-action-btn cast-launcher cast-btn"
+      title="Chromecast"
+      aria-label="Chromecast"></google-cast-launcher>
   </div>
 
   <!-- Nouveau bloc contrôles films (channelList) -->
@@ -318,8 +317,10 @@
 </div>
 
 
-
 <script src="tron-ares.js"></script>
-<script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+
+<script
+  type="text/javascript"
+  src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 </body>
 </html>
