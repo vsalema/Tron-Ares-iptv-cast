@@ -1432,16 +1432,7 @@ function fallbackToExternalPlayer(entry) {
 function playUrl(entry) {
   if (!entry || !entry.url || !videoEl) return;
 
-  // 🔒 Films : si l’aperçu est terminé et pas déverrouillé, on bloque jusqu’au PIN
-  if (isFilmEntry(entry)) {
-    if (maybeBlockFilmBecausePreviewExpired(entry)) {
-      try { setStatus('Accès Films requis'); } catch {}
-      return;
-    }
-  } else {
-    // si on quitte l'onglet films, on stoppe le timer d'aperçu
-    clearFilmPreviewTimer();
-  }
+  
 
   // stop radio si elle joue
   if (typeof radioAudio !== 'undefined' && radioPlaying) {
