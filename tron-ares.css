@@ -514,7 +514,7 @@ body {
 }
 
 .banner-img {
-  height: 78px;
+  height: 38px;
   width: auto;
   filter: drop-shadow(0 0 10px var(--tron-border));
   opacity: 0.9;
@@ -555,7 +555,7 @@ body.theme-redblue .banner-img {
   box-shadow: var(--shadow-neon);
   transition: var(--transition-fast);
   overflow: hidden;
-  gap: 65px;
+  gap: 0;
 }
 
 .toggle-sidebar-btn:hover {
@@ -1444,6 +1444,14 @@ body.theme-redblue .np-logo img {
     transform: translateX(-100%);
     opacity: 0;
   }
+  /* Mobile/tablette : garder le bouton burger toujours visible (au-dessus de la sidebar) */
+  .toggle-sidebar-btn{
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    z-index: 80;
+  }
+
 }
 
 @media (max-width: 768px) {
@@ -1457,13 +1465,18 @@ body.theme-redblue .np-logo img {
 
   .top-bar-right {
     flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+  .top-bar-right .btn{
+    flex: 1 1 40%;
     justify-content: center;
   }
 
-  .top-bar-right .btn,
-  .toggle-sidebar-btn {
-    flex: 1 1 40%;
+  .toggle-sidebar-btn{
+    flex: 0 0 auto;
     justify-content: center;
+    margin-left: auto;
   }
 
   .now-playing { order: -1; margin-bottom: 4px; }
@@ -1473,22 +1486,10 @@ body.theme-redblue .np-logo img {
     justify-content: center;
   }
 
-  /* burger left/right visibles sur mobile */
+  /* Mobile : un seul burger (centre) */
   .burger-left,
-  .burger-right {
-    display: inline-block;
-    font-size: 14px;
-    color: var(--tron-text);
-    filter: drop-shadow(0 0 6px var(--tron-border));
-  }
-
-  .toggle-sidebar-btn.active .burger-left,
-  .toggle-sidebar-btn.active .burger-right {
-    color: var(--tron-accent);
-    filter: drop-shadow(0 0 8px var(--tron-accent));
-  }
-
-  /* Mobile : bottom-sheet tracks */
+  .burger-right{ display:none !important; }
+/* Mobile : bottom-sheet tracks */
   .np-track-menu {
     left: 10px;
     right: 10px;
@@ -1531,6 +1532,38 @@ body.theme-redblue .np-logo img {
     bottom: 90px;
     height: auto;
   }
+
+  /* Top-bar banner: always centered + never overlaps the fixed burger (landscape mobile) */
+  .top-bar{
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+
+    /* leave room for the fixed burger button on the right */
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-right: calc(54px + env(safe-area-inset-right));
+  }
+
+  .top-bar-left{ justify-self: start; }
+  .top-bar-right{ justify-self: end; flex-wrap: nowrap; }
+
+  .top-bar-banner{
+    position: static;
+    left: auto;
+    top: auto;
+    transform: none;
+    justify-self: center;
+    max-width: 46vw;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .banner-img{
+    height: clamp(24px, 8vh, 40px);
+    max-width: 100%;
+    width: auto;
+  }
 }
 
 /* FIX MOBILE PAYSAGE (S24 & co) */
@@ -1556,6 +1589,10 @@ body.theme-redblue .np-logo img {
   }
 
   .top-bar { margin-bottom: 4px; }
+
+  /* Even tighter banner for very short landscape screens */
+  .banner-img{ height: clamp(22px, 9vh, 34px); }
+
 
   .player-shell {
     flex: 0 0 auto;
@@ -1771,7 +1808,7 @@ body.theme-redblue .np-logo img {
 /* Mobile fix: sidebar au-dessus de l'overlay radio */
 @media (max-width: 900px) {
   .sidebar { z-index: 120; }
-  #radioOverlayLayer { z-index: 40 !important; }
+  #radioOverlayLayer { z-index: 80 !important; }
 }
 
 
@@ -1890,262 +1927,3 @@ body.theme-redblue .np-logo img {
   font-size: 11px;
 }
 
-/* =====================================================
-   FILM ACCESS OVERLAY (5 min preview + code)
-   ===================================================== */
-.film-access-overlay{
-  position:fixed;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:16px;
-  z-index:9999;
-  background:rgba(0,0,0,.58);
-  backdrop-filter: blur(8px);
-}
-.film-access-overlay.hidden{ display:none; }
-
-.film-access-dialog{
-  width:min(420px, 94vw);
-  border-radius:18px;
-  border:1px solid rgba(0,255,255,.22);
-  background: linear-gradient(180deg, rgba(0,0,0,.72), rgba(0,0,0,.55));
-  box-shadow: 0 0 26px rgba(0,255,255,.10);
-  padding:14px 14px 12px;
-}
-
-.film-access-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:8px;
-}
-.film-access-title{
-  font-family: Orbitron, system-ui, sans-serif;
-  font-weight:700;
-  letter-spacing:.8px;
-  font-size:14px;
-  color: rgba(230,255,255,.96);
-}
-.film-access-close{
-  padding:6px 10px;
-}
-
-.film-access-text{
-  font-size:12px;
-  color: rgba(220,245,255,.82);
-  line-height:1.45;
-  margin: 2px 0 10px;
-}
-.film-access-input{
-  width:100%;
-  margin:0;
-}
-.film-access-error{
-  min-height:16px;
-  margin-top:6px;
-  font-size:12px;
-  color: rgba(255,145,0,.95);
-}
-.film-access-actions{
-  display:flex;
-  justify-content:flex-end;
-  gap:10px;
-  margin-top:10px;
-}
-.film-access-hint{
-  margin-top:10px;
-  font-size:11px;
-  color: rgba(180,220,240,.65);
-}
-.film-access-hint code{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 11px;
-}
-
-/* =====================================================
-   🔒 Modal restriction Films (PIN)
-   ===================================================== */
-.tron-lock-backdrop{
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  background: rgba(0,0,0,.72);
-  backdrop-filter: blur(6px);
-  z-index: 9999;
-}
-
-.tron-lock-modal{
-  width: min(560px, 100%);
-  border: 1px solid rgba(255,255,255,.10);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(5,11,24,.92), rgba(2,4,10,.92));
-  box-shadow: 0 20px 60px rgba(0,0,0,.55);
-  padding: 16px 16px 14px;
-}
-
-.tron-lock-title{
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: .2px;
-  margin-bottom: 8px;
-}
-
-.tron-lock-sub{
-  opacity: .9;
-  font-size: 13px;
-  line-height: 1.35;
-  margin-bottom: 12px;
-}
-
-.tron-lock-sub.tron-lock-warn{
-  opacity: 1;
-  filter: saturate(1.2);
-}
-
-.tron-lock-input{
-  width: 100%;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.25);
-  color: var(--tron-text);
-  outline: none;
-  padding: 0 12px;
-  margin-bottom: 12px;
-}
-
-.tron-lock-input:focus{
-  border-color: rgba(255,255,255,.22);
-  box-shadow: 0 0 0 4px rgba(255,183,77,.12);
-}
-
-.tron-lock-actions{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.tron-lock-foot{
-  font-size: 12px;
-  opacity: .75;
-  line-height: 1.35;
-}
-
-
-/* =========================
-   Chromecast (bouton Now Playing)
-   ========================= */
-
-.np-actions{
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap: 6px;
-  margin-left: 6px;
-  flex: 0 0 auto;
-}
-
-.np-action-btn{
-  width: 26px;
-  height: 26px;
-  font-size: 14px;
-  padding: 0;
-}
-
-.cast-btn{
-  position: relative;
-}
-
-.cast-btn::after{
-  content:"";
-  position:absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(127,159,179,0.75);
-  box-shadow: 0 0 6px rgba(0,229,255,0.25);
-  opacity: .85;
-}
-
-.cast-btn.cast-available::after{
-  background: rgba(0,229,255,0.95);
-  box-shadow: 0 0 10px rgba(0,229,255,0.45);
-  opacity: 1;
-}
-
-.cast-btn.cast-connecting{
-  animation: castPulse 1s infinite ease-in-out;
-}
-
-.cast-btn.cast-connected{
-  border-color: var(--tron-accent);
-  color: var(--tron-accent-soft);
-  box-shadow: var(--shadow-neon-amber);
-}
-
-.cast-btn.cast-connected::after{
-  background: rgba(255,145,0,0.95);
-  box-shadow: 0 0 10px rgba(255,145,0,0.75);
-  opacity: 1;
-}
-
-.cast-btn.cast-disabled{
-  opacity: .45;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-@keyframes castPulse{
-  0%,100%{ transform: scale(1); }
-  50%{ transform: scale(1.08); }
-}
-
-
-/* Chromecast launcher (élément officiel) */
-.cast-launcher{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cast-launcher .cast-button{
-  width: 26px;
-  height: 26px;
-}
-
-.cast-launcher button{
-  width: 26px !important;
-  height: 26px !important;
-  padding: 0 !important;
-  border-radius: 10px;
-  border: 1px solid rgba(0,229,255,0.25);
-  background: rgba(0,0,0,0.25);
-}
-
-
-.cast-launcher.cast-disabled{
-  opacity: .45;
-  pointer-events: none;
-}
-/* Flags as inline SVG (base64) to avoid Windows/Chrome flag-emoji fallback (FR/PT letters) */
-.flag {
-  width: 1.15em;
-  height: 1.15em;
-  display: inline-block;
-  border-radius: 2px;
-  background-size: cover;
-  background-position: center;
-  flex: 0 0 auto;
-  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.25);
-}
-.flag-fr { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNmZmZmZmYiLz4KICA8cmVjdCB3aWR0aD0iMjEuMzMzIiBoZWlnaHQ9IjY0IiB4PSIwIiB5PSIwIiBmaWxsPSIjMDA1NUE0Ii8+CiAgPHJlY3Qgd2lkdGg9IjIxLjMzMyIgaGVpZ2h0PSI2NCIgeD0iNDIuNjY3IiB5PSIwIiBmaWxsPSIjRUY0MTM1Ii8+Cjwvc3ZnPg=="); }
-.flag-pt { background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNEQTI5MUMiLz4KICA8cmVjdCB3aWR0aD0iMjUuNiIgaGVpZ2h0PSI2NCIgeD0iMCIgeT0iMCIgZmlsbD0iIzA0NkEzOCIvPgogIDwhLS0gc2ltcGxpZmllZCBlbWJsZW0gLS0+CiAgPGNpcmNsZSBjeD0iMjUuNiIgY3k9IjMyIiByPSIxMSIgZmlsbD0iI0ZGQ0MwMCIvPgogIDxjaXJjbGUgY3g9IjI1LjYiIGN5PSIzMiIgcj0iNy41IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjkiLz4KICA8Y2lyY2xlIGN4PSIyNS42IiBjeT0iMzIiIHI9IjUuMiIgZmlsbD0iI0RBMjkxQyIgb3BhY2l0eT0iMC45NSIvPgo8L3N2Zz4="); }
