@@ -2542,7 +2542,7 @@ document.addEventListener('click', () => closeAllTrackMenus());
 // CHARGEMENT AUTOMATIQUE DES PLAYLISTS PRINCIPALES
 // =====================================================
 (async function loadMainPlaylists() {
-  await loadFromUrl("vsalema.github.io/tvpt4/filmmpd.m3u");
+  await loadFromUrl("https://vsalema.github.io/tvpt4/css/tr.m3u");
   await loadFrM3u("https://vsalema.github.io/tvpt4/css/playlist-tvf-r.m3u");
 
   // ✅ Akamai-style: lecture directe via ?streamUrl=...
